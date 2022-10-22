@@ -9,6 +9,9 @@ import time
 import string
 import argparse
 import itertools
+import subprocess
+import getopt
+
 
 #librería para barra de progreso
 from tqdm import tqdm
@@ -18,19 +21,24 @@ from tqdm import tqdm
 #Función que en función de los parámetros como son los caracteres a usar, longitud mínima y máxima y fichero de salida
 #almacenará todas las combinaciones posibles que podemos usar como contraseñas
 
-def crearDiccionario(chrs, min_length, max_length, output):
+def crearDiccionario(chrs, min_length, max_length, outputfile):
     
+    inputfile = "archivo.pdf.gpg"
+
+    outputdecryptedfile = "archivo.pdf"
+
     if min_length > max_length:
         print ("[!] ATENCIÓN `min_length` debe ser menor o igual que `max_length`")
         sys.exit()
 
-    if os.path.exists(os.path.dirname(output)) == False:
-        os.makedirs(os.path.dirname(output))
+    if os.path.exists(os.path.dirname(outputfile)) == False:
+        os.makedirs(os.path.dirname(outputfile))
 
-    print ('[+] Creando diccionario en `%s`...' % output)
+    print ('[+] Creando diccionario en `%s`...' % outputfile)
     print ('[i] Tiempo de inicio: %s' % time.strftime('%H:%M:%S'))
 
-    output = open(output, 'w')
+    f = open(outputdecryptedfile, 'w')
+    wordlist = open(outputfile,'w')
 
 
     #tqdm es básicamente una librería para añadir una barra de progreso para visualizar mejor el tiempo restante
@@ -41,11 +49,28 @@ def crearDiccionario(chrs, min_length, max_length, output):
         for n in range(min_length, max_length + 1):
             for x in itertools.product(chrs, repeat=n):
                 chars = ''.join(x)
-                output.write("%s\n" % chars)
+                cmdstring = "echo \"" + chars + "\" | gpg --passphrase-fd 0 -q --batch --allow-multiple-messages --no-tty --output " + outputdecryptedfile + " -d " + inputfile + ";"
+                output = subprocess.Popen(cmdstring,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE) # check_output(cmdstring,shell=True,stderr=None)  
+                wordlist.write("%s\n" % chars)
                 sys.stdout.write('\r[+] saving character `%s`' % chars)
                 sys.stdout.flush()
         
-    output.close()
+    stderroutput=output.communicate()[1]  #must asave it off or it goes bubye
+    stderroutput=stderroutput.decode('utf-8')
+
+    if stderroutput!="gpg: decryption failed: Bad session key\n":
+                f.write("stderroutput:\n"+stderroutput) #print(stderroutput)
+                if (stderroutput=="gpg: handle plaintext failed: General error\ngpg: WARNING: message was not integrity protected\n"):
+                    f.write("passphrase is:"+ chars) 
+                    print("The passphrase is -->"+chars+ "\n" + stderroutput)
+                    f.close()
+                    sys.exit(1) 
+    exitcode=output.poll() #without calling poll or communicate the exit code will be 
+    if exitcode==0:
+        print("The passphrase is "+chars)
+        exit
+
+    f.close()
     print ('\n[i] Tiempo final: %s' % time.strftime('%H:%M:%S'))
 
 
